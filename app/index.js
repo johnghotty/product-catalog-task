@@ -9,48 +9,62 @@ import {
   SafeAreaView,
   Image,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 
-// Демо-дані (замість API)
+// Демо-дані
 const DEMO_PRODUCTS = [
   {
     id: 1,
     title: 'Ноутбук MacBook Pro',
     price: 49999,
     image: 'https://picsum.photos/id/0/200/200',
+    category: 'Електроніка',
+    description: 'Потужний ноутбук для роботи та творчості. 16GB RAM, 512GB SSD, процесор M2.',
   },
   {
     id: 2,
     title: 'Смартфон iPhone 15',
     price: 39999,
     image: 'https://picsum.photos/id/1/200/200',
+    category: 'Смартфони',
+    description: 'Новітній смартфон з потрійною камерою та безмежним дисплеєм.',
   },
   {
     id: 3,
     title: 'Навушники Sony WH-1000XM5',
     price: 12999,
     image: 'https://picsum.photos/id/2/200/200',
+    category: 'Аудіо',
+    description: 'Бездротові навушники з шумозаглушенням та відмінним звуком.',
   },
   {
     id: 4,
     title: 'Планшет iPad Air',
     price: 24999,
     image: 'https://picsum.photos/id/3/200/200',
+    category: 'Планшети',
+    description: 'Легкий та потужний планшет для навчання та розваг.',
   },
   {
     id: 5,
     title: 'Смарт-годинник Apple Watch',
     price: 15999,
     image: 'https://picsum.photos/id/4/200/200',
+    category: 'Гаджети',
+    description: 'Розумний годинник для стеження за здоров\'ям та активністю.',
   },
   {
     id: 6,
     title: 'Бездротова клавіатура Logitech',
     price: 2999,
     image: 'https://picsum.photos/id/5/200/200',
+    category: 'Аксесуари',
+    description: 'Компактна бездротова клавіатура з підсвіткою.',
   },
 ];
 
 export default function HomeScreen() {
+  const router = useRouter();
   const [products] = useState(DEMO_PRODUCTS);
   const [searchText, setSearchText] = useState('');
   const [sortOrder, setSortOrder] = useState('asc');
@@ -69,13 +83,17 @@ export default function HomeScreen() {
     return b.price - a.price;
   });
 
-  // Картка товару
+  // Картка товару з можливістю натискання
   const ProductCard = ({ product }) => (
-    <View style={styles.card}>
+    <TouchableOpacity 
+      style={styles.card} 
+      onPress={() => router.push(`/product/${product.id}?product=${JSON.stringify(product)}`)}
+      activeOpacity={0.7}
+    >
       <Image source={{ uri: product.image }} style={styles.image} />
       <Text style={styles.title} numberOfLines={2}>{product.title}</Text>
       <Text style={styles.price}>{product.price.toLocaleString()} ₴</Text>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
