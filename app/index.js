@@ -7,30 +7,46 @@ import {
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
-  Image,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useApp } from '../context/AppContext';
 import { fetchProducts } from '../api/productsApi';
+import { getCachedProducts, cacheProducts } from '../utils/storage';
+import ProductCard from '../components/ProductCard';
+import CategoryFilter from '../components/CategoryFilter';
+import Toast from 'react-native-toast-message';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { theme, favorites, toggleFavorite, isFavorite } = useApp();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [sortOrder, setSortOrder] = useState('asc');
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
-  // Завантаження товарів з API
-  const loadProducts = useCallback(async () => {
+  const loadProducts = useCallback(async (showCache = true) => {
     try {
-      setError(null);
+      if (showCache) {
+        const cached = await getCachedProducts();
+        if (cached) {
+          setProducts(cached);
+          setLoading(false);
+        }
+      }
+
       const data = await fetchProducts();
       setProducts(data);
-    } catch (err) {
-      setError('Не вдалося завантажити товари. Перевірте з\'єднання з інтернетом.');
-      console.error(err);
+      await cacheProducts(data);
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Помилка',
+        text2: 'Не вдалося завантажити товари',
+      });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -41,87 +57,76 @@ export default function HomeScreen() {
     loadProducts();
   }, [loadProducts]);
 
-  // Оновлення при свайпі вниз
   const onRefresh = () => {
     setRefreshing(true);
-    loadProducts();
+    loadProducts(false);
   };
 
-  // Фільтрація
   let filteredProducts = products;
+  
   if (searchText.trim()) {
     filteredProducts = filteredProducts.filter(product =>
       product.title.toLowerCase().includes(searchText.toLowerCase())
     );
   }
+  
+  if (selectedCategory !== 'all') {
+    filteredProducts = filteredProducts.filter(
+      product => product.category === selectedCategory
+    );
+  }
 
-  // Сортування
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     if (sortOrder === 'asc') return a.price - b.price;
     return b.price - a.price;
   });
 
-  // Картка товару
-  const ProductCard = ({ product }) => (
-    <TouchableOpacity 
-      style={styles.card} 
-      onPress={() => router.push(`/product/${product.id}?id=${product.id}`)}
-      activeOpacity={0.7}
-    >
-      <Image source={{ uri: product.image }} style={styles.image} resizeMode="contain" />
-      <Text style={styles.title} numberOfLines={2}>{product.title}</Text>
-      <Text style={styles.price}>${product.price.toFixed(2)}</Text>
-    </TouchableOpacity>
-  );
-
-  // Стан завантаження
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Завантаження товарів...</Text>
-      </View>
-    );
-  }
-
-  // Стан помилки
-  if (error) {
-    return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadProducts}>
-          <Text style={styles.retryButtonText}>Спробувати знову</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={styles.centerContainer}>
+          <Text style={{ color: theme.text, fontSize: 16 }}>Завантаження товарів...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.header}>Каталог товарів</Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <Text style={[styles.header, { color: theme.text }]}>🛍️ Каталог товарів</Text>
 
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Пошук за назвою..."
-        value={searchText}
-        onChangeText={setSearchText}
-        clearButtonMode="while-editing"
+      <View style={styles.searchWrapper}>
+        <TextInput
+          style={[styles.searchInput, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
+          placeholder="🔍 Пошук за назвою..."
+          placeholderTextColor={theme.text + '80'}
+          value={searchText}
+          onChangeText={setSearchText}
+          clearButtonMode="while-editing"
+        />
+      </View>
+
+      <CategoryFilter
+        selectedCategory={selectedCategory}
+        onSelectCategory={setSelectedCategory}
+        theme={theme}
       />
 
       <View style={styles.sortContainer}>
-        <Text style={styles.sortLabel}>Сортувати за ціною:</Text>
+        <Text style={[styles.sortLabel, { color: theme.text }]}>💰 Сортувати:</Text>
         <TouchableOpacity
-          style={[styles.sortButton, sortOrder === 'asc' && styles.activeSort]}
+          style={[styles.sortButton, { backgroundColor: theme.card }, sortOrder === 'asc' && { backgroundColor: theme.primary }]}
           onPress={() => setSortOrder('asc')}
         >
-          <Text style={sortOrder === 'asc' ? styles.activeSortText : styles.sortButtonText}>
+          <Text style={[styles.sortButtonText, { color: theme.text }, sortOrder === 'asc' && { color: '#fff' }]}>
             Від дешевших
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.sortButton, sortOrder === 'desc' && styles.activeSort]}
+          style={[styles.sortButton, { backgroundColor: theme.card }, sortOrder === 'desc' && { backgroundColor: theme.primary }]}
           onPress={() => setSortOrder('desc')}
         >
-          <Text style={sortOrder === 'desc' ? styles.activeSortText : styles.sortButtonText}>
+          <Text style={[styles.sortButtonText, { color: theme.text }, sortOrder === 'desc' && { color: '#fff' }]}>
             Від дорожчих
           </Text>
         </TouchableOpacity>
@@ -129,17 +134,25 @@ export default function HomeScreen() {
 
       {sortedProducts.length === 0 ? (
         <View style={styles.centerContainer}>
-          <Text style={styles.emptyText}>Нічого не знайдено 😕</Text>
+          <Text style={[styles.emptyText, { color: theme.text }]}>😕 Нічого не знайдено</Text>
         </View>
       ) : (
         <FlatList
           data={sortedProducts}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => <ProductCard product={item} />}
+          renderItem={({ item }) => (
+            <ProductCard
+              product={item}
+              onPress={() => router.push(`/product/${item.id}?id=${item.id}`)}
+              onFavoritePress={() => toggleFavorite(item.id)}
+              isFavorite={isFavorite(item.id)}
+              theme={theme}
+            />
+          )}
           numColumns={2}
           contentContainerStyle={styles.list}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.primary]} />
           }
           showsVerticalScrollIndicator={false}
         />
@@ -151,8 +164,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    paddingTop: 40,
+    paddingTop: Platform.OS === 'android' ? 20 : 0,
   },
   centerContainer: {
     flex: 1,
@@ -161,103 +173,49 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   header: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 20,
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  searchWrapper: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
   },
   searchInput: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 12,
-    marginHorizontal: 16,
-    marginBottom: 12,
     fontSize: 16,
   },
   sortContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 16,
-    marginBottom: 16,
-    gap: 10,
+    marginVertical: 12,
+    gap: 12,
+    flexWrap: 'wrap',
   },
   sortLabel: {
     fontSize: 14,
-    color: '#555',
+    fontWeight: '500',
   },
   sortButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-  },
-  activeSort: {
-    backgroundColor: '#3498db',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 25,
   },
   sortButtonText: {
-    color: '#333',
-  },
-  activeSortText: {
-    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
   },
   list: {
     paddingHorizontal: 8,
     paddingBottom: 16,
   },
-  card: {
-    flex: 1,
-    margin: 8,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  image: {
-    width: '100%',
-    height: 150,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginVertical: 4,
-  },
-  price: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginTop: 4,
-  },
-  loadingText: {
-    fontSize: 18,
-    color: '#3498db',
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#e74c3c',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  retryButton: {
-    backgroundColor: '#3498db',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-  },
   emptyText: {
     fontSize: 18,
-    color: '#999',
+    textAlign: 'center',
   },
 });
