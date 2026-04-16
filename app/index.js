@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,66 +8,44 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Image,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-
-// Демо-дані
-const DEMO_PRODUCTS = [
-  {
-    id: 1,
-    title: 'Ноутбук MacBook Pro',
-    price: 49999,
-    image: 'https://picsum.photos/id/0/200/200',
-    category: 'Електроніка',
-    description: 'Потужний ноутбук для роботи та творчості. 16GB RAM, 512GB SSD, процесор M2.',
-  },
-  {
-    id: 2,
-    title: 'Смартфон iPhone 15',
-    price: 39999,
-    image: 'https://picsum.photos/id/1/200/200',
-    category: 'Смартфони',
-    description: 'Новітній смартфон з потрійною камерою та безмежним дисплеєм.',
-  },
-  {
-    id: 3,
-    title: 'Навушники Sony WH-1000XM5',
-    price: 12999,
-    image: 'https://picsum.photos/id/2/200/200',
-    category: 'Аудіо',
-    description: 'Бездротові навушники з шумозаглушенням та відмінним звуком.',
-  },
-  {
-    id: 4,
-    title: 'Планшет iPad Air',
-    price: 24999,
-    image: 'https://picsum.photos/id/3/200/200',
-    category: 'Планшети',
-    description: 'Легкий та потужний планшет для навчання та розваг.',
-  },
-  {
-    id: 5,
-    title: 'Смарт-годинник Apple Watch',
-    price: 15999,
-    image: 'https://picsum.photos/id/4/200/200',
-    category: 'Гаджети',
-    description: 'Розумний годинник для стеження за здоров\'ям та активністю.',
-  },
-  {
-    id: 6,
-    title: 'Бездротова клавіатура Logitech',
-    price: 2999,
-    image: 'https://picsum.photos/id/5/200/200',
-    category: 'Аксесуари',
-    description: 'Компактна бездротова клавіатура з підсвіткою.',
-  },
-];
+import { fetchProducts } from '../api/productsApi';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [products] = useState(DEMO_PRODUCTS);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [sortOrder, setSortOrder] = useState('asc');
+
+  // Завантаження товарів з API
+  const loadProducts = useCallback(async () => {
+    try {
+      setError(null);
+      const data = await fetchProducts();
+      setProducts(data);
+    } catch (err) {
+      setError('Не вдалося завантажити товари. Перевірте з\'єднання з інтернетом.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+
+  // Оновлення при свайпі вниз
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadProducts();
+  };
 
   // Фільтрація
   let filteredProducts = products;
@@ -83,18 +61,39 @@ export default function HomeScreen() {
     return b.price - a.price;
   });
 
-  // Картка товару з можливістю натискання
+  // Картка товару
   const ProductCard = ({ product }) => (
     <TouchableOpacity 
       style={styles.card} 
-      onPress={() => router.push(`/product/${product.id}?product=${JSON.stringify(product)}`)}
+      onPress={() => router.push(`/product/${product.id}?id=${product.id}`)}
       activeOpacity={0.7}
     >
-      <Image source={{ uri: product.image }} style={styles.image} />
+      <Image source={{ uri: product.image }} style={styles.image} resizeMode="contain" />
       <Text style={styles.title} numberOfLines={2}>{product.title}</Text>
-      <Text style={styles.price}>{product.price.toLocaleString()} ₴</Text>
+      <Text style={styles.price}>${product.price.toFixed(2)}</Text>
     </TouchableOpacity>
   );
+
+  // Стан завантаження
+  if (loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.loadingText}>Завантаження товарів...</Text>
+      </View>
+    );
+  }
+
+  // Стан помилки
+  if (error) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={loadProducts}>
+          <Text style={styles.retryButtonText}>Спробувати знову</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -105,26 +104,33 @@ export default function HomeScreen() {
         placeholder="Пошук за назвою..."
         value={searchText}
         onChangeText={setSearchText}
+        clearButtonMode="while-editing"
       />
 
       <View style={styles.sortContainer}>
-        <Text style={styles.sortLabel}>Сортувати:</Text>
+        <Text style={styles.sortLabel}>Сортувати за ціною:</Text>
         <TouchableOpacity
           style={[styles.sortButton, sortOrder === 'asc' && styles.activeSort]}
           onPress={() => setSortOrder('asc')}
         >
-          <Text>Від дешевших</Text>
+          <Text style={sortOrder === 'asc' ? styles.activeSortText : styles.sortButtonText}>
+            Від дешевших
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.sortButton, sortOrder === 'desc' && styles.activeSort]}
           onPress={() => setSortOrder('desc')}
         >
-          <Text>Від дорожчих</Text>
+          <Text style={sortOrder === 'desc' ? styles.activeSortText : styles.sortButtonText}>
+            Від дорожчих
+          </Text>
         </TouchableOpacity>
       </View>
 
       {sortedProducts.length === 0 ? (
-        <Text style={styles.emptyText}>Нічого не знайдено</Text>
+        <View style={styles.centerContainer}>
+          <Text style={styles.emptyText}>Нічого не знайдено 😕</Text>
+        </View>
       ) : (
         <FlatList
           data={sortedProducts}
@@ -132,6 +138,10 @@ export default function HomeScreen() {
           renderItem={({ item }) => <ProductCard product={item} />}
           numColumns={2}
           contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          showsVerticalScrollIndicator={false}
         />
       )}
     </SafeAreaView>
@@ -143,6 +153,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
     paddingTop: 40,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   header: {
     fontSize: 28,
@@ -179,8 +195,15 @@ const styles = StyleSheet.create({
   activeSort: {
     backgroundColor: '#3498db',
   },
+  sortButtonText: {
+    color: '#333',
+  },
+  activeSortText: {
+    color: '#fff',
+  },
   list: {
     paddingHorizontal: 8,
+    paddingBottom: 16,
   },
   card: {
     flex: 1,
@@ -213,9 +236,27 @@ const styles = StyleSheet.create({
     color: '#2c3e50',
     marginTop: 4,
   },
-  emptyText: {
+  loadingText: {
+    fontSize: 18,
+    color: '#3498db',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#e74c3c',
     textAlign: 'center',
-    marginTop: 50,
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#3498db',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  emptyText: {
     fontSize: 18,
     color: '#999',
   },
